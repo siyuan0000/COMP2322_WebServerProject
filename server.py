@@ -89,7 +89,7 @@ def start_server():
 
     # Close the server socket when the loop breaks (e.g., on KeyboardInterrupt)
     server_socket.close()
-    print("[SERVER STOPPED]")
+    print("[---SERVER STOPPED---]")
 
 # --- Start the Server ---
 if __name__ == "__main__":
