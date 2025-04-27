@@ -225,7 +225,7 @@ def run_server(host: str = HOST, port: int = PORT):
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind((host, port))
     server_sock.listen(5)
-    print(f"Serving HTTP on {host} port {port} (Press Ctrl+C to quit)...")
+    print(f"Serving HTTP on {host} port {port} ...")
     try:
         while True:
             client_sock, client_addr = server_sock.accept()
@@ -294,7 +294,7 @@ def run_server(host: str = HOST, port: int = PORT):
             finally:
                 client_sock.close()
     except KeyboardInterrupt:
-        print("\nShutting down server.")
+        print("\n[SHUTDOWN] Server stopped by user")
     finally:
         server_sock.close()
 
