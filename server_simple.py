@@ -1,96 +1,94 @@
 import socket
 import threading
+from datetime import datetime
 
+# --- Phase 1: Simple HTTP Server ---
 # --- Configuration ---
-HOST = '127.0.0.1'  # Standard loopback interface address (localhost)
-PORT = 8080        # Port to listen on (non-privileged ports are > 1023)
-BUFFER_SIZE = 1024 # Size of the buffer for receiving data
+HOST = '127.0.0.1'  # Localhost
+PORT = 8080  # Non-privileged port
+BUFFER_SIZE = 4096  # Increased buffer size for larger requests
+
 
 # --- Client Handler Function ---
 def handle_client(conn, addr):
-    """Handles a single client connection."""
+    """Handles a client connection and logs the request."""
+    client_ip = addr[0]
     print(f"[NEW CONNECTION] {addr} connected.")
 
     try:
-        # Receive the request data from the client
-        request_data = conn.recv(BUFFER_SIZE)
-        if not request_data:
-            print(f"[CONNECTION CLOSED] Connection from {addr} closed prematurely.")
-            return # Exit if no data received
+        # Receive full HTTP request (may require multiple reads)
+        request_data = b''
+        while True:
+            chunk = conn.recv(BUFFER_SIZE)
+            if not chunk:
+                break
+            request_data += chunk
+            if b'\r\n\r\n' in request_data:  # Check for end of headers
+                break
 
-        # Decode and print the raw HTTP request
-        # For Phase 1, we just display the request
-        print(f"--- Received Request from {addr} ---")
-        print(request_data.decode('utf-8'))
+        if not request_data:
+            print(f"[ERROR] No data received from {addr}")
+            return
+
+        # Decode request and parse headers
+        decoded_request = request_data.decode('utf-8', errors='ignore')
+        headers = decoded_request.split('\r\n')
+        first_line = headers[0].split() if headers else []
+
+        # Extract request method and path
+        method = first_line[0] if len(first_line) > 0 else 'UNKNOWN'
+        path = first_line[1] if len(first_line) > 1 else '/'
+
+        # Log request details (Phase 1 requirement)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = (
+            f"[{timestamp}] Client: {client_ip} | "
+            f"Requested File: {path} | Method: {method}"
+        )
+        print(log_entry)
+
+        # Display raw request (for debugging)
+        print(f"\n--- Raw Request from {addr} ---")
+        print(decoded_request.strip())
         print("------------------------------------")
 
-        # --- Placeholder for Phase 2: Response Generation ---
-        # In the next phase, you would parse the request_data here,
-        # determine the requested file, build an HTTP response,
-        # and send it back using conn.sendall()
-        # For now, we just acknowledge receipt on the server side.
-
     except socket.error as e:
-        print(f"[SOCKET ERROR] Error handling client {addr}: {e}")
+        print(f"[SOCKET ERROR] {addr}: {e}")
     except Exception as e:
-        print(f"[ERROR] Unexpected error handling client {addr}: {e}")
+        print(f"[UNEXPECTED ERROR] {addr}: {e}")
     finally:
-        # Clean up the connection
-        print(f"[CLOSING CONNECTION] Closing connection to {addr}")
+        # Phase 1: Close connection without sending response
         conn.close()
+        print(f"[CLOSED] Connection to {addr} closed\n")
+
 
 # --- Main Server Function ---
 def start_server():
-    """Starts the multi-threaded web server."""
+    """Starts the multi-threaded server."""
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # Allow reusing the address (helpful for quick restarts)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
-        # Bind the socket to the host and port
         server_socket.bind((HOST, PORT))
-    except socket.error as e:
-        print(f"[BIND ERROR] Failed to bind to {HOST}:{PORT} - {e}")
-        print("Check if another service is running on this port.")
-        return # Exit if binding fails
-    except OverflowError:
-         print(f"[BIND ERROR] Port number {PORT} is likely out of the valid range (0-65535).")
-         return
+        server_socket.listen(5)
+        print(f"[LISTENING] Server running on {HOST}:{PORT}\n")
+    except Exception as e:
+        print(f"[ERROR] Failed to start server: {e}")
+        return
 
-    # Start listening for incoming connections
-    # The number (e.g., 5) is the backlog - max number of queued connections
-    server_socket.listen(5)
-    print(f"[LISTENING] Server is listening on {HOST}:{PORT}")
-
-    # --- Main Server Loop ---
-    while True:
-        try:
-            # Accept a new connection
-            # conn is a new socket object usable to send/receive data on the connection
-            # addr is the address bound to the socket on the other end of the connection
+    try:
+        while True:
             conn, addr = server_socket.accept()
+            thread = threading.Thread(target=handle_client, args=(conn, addr))
+            thread.daemon = True
+            thread.start()
+            print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
+    except KeyboardInterrupt:
+        print("\n[SHUTDOWN] Server stopped by user")
+    finally:
+        server_socket.close()
 
-            # Create a new thread to handle the client connection
-            # Pass the connection socket and address to the handler function
-            client_thread = threading.Thread(target=handle_client, args=(conn, addr))
-            client_thread.daemon = True # Allows main program to exit even if threads are running
-            client_thread.start()
 
-            # Print active thread count (optional, for monitoring)
-            # print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
-
-        except KeyboardInterrupt:
-            print("\n[SERVER SHUTDOWN] Shutting down server...")
-            break
-        except socket.error as e:
-            print(f"[ACCEPT ERROR] Error accepting connection: {e}")
-            # Consider whether to continue or break based on the error
-
-    # Close the server socket when the loop breaks (e.g., on KeyboardInterrupt)
-    server_socket.close()
-    print("[---SERVER STOPPED---]")
-
-# --- Start the Server ---
+# --- Entry Point ---
 if __name__ == "__main__":
     start_server()
