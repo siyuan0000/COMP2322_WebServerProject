@@ -32,3 +32,12 @@
 2025-04-27 22:29:34 - 127.0.0.1:55566 - "GET /Leaderboard.PNG HTTP/1.1" - 200 OK
 2025-04-27 22:29:42 - 127.0.0.1:55566 - "GET /ink_vis_r123_bt123.html HTTP/1.1" - 200 OK
 2025-04-27 22:57:48 - 127.0.0.1:55814 - "GET / HTTP/1.1" - 200 OK
+2025-04-28 16:21:24 - 127.0.0.1:63409 - "GET /index.html HTTP/1.1" - 200 OK
+2025-04-28 16:22:26 - 127.0.0.1:63428 - "HEAD /index.html HTTP/1.1" - 200 OK
+2025-04-28 16:22:33 - 127.0.0.1:63435 - "GET /index.html HTTP/1.1" - 200 OK
+2025-04-28 16:22:33 - 127.0.0.1:63436 - "HEAD /index.html HTTP/1.1" - 200 OK
+2025-04-28 16:22:33 - 127.0.0.1:63437 - "GET /index.html HTTP/1.1" - 304 Not Modified
+2025-04-28 16:22:33 - 127.0.0.1:63438 - "GET /nofile.html HTTP/1.1" - 404 Not Found
+2025-04-28 16:22:33 - 127.0.0.1:63439 - "GET /../server.log HTTP/1.1" - 403 Forbidden
+2025-04-28 16:22:33 - 127.0.0.1:63440 - "GET /unsupported.xyz HTTP/1.1" - 404 Not Found
+2025-04-28 16:22:33 - 127.0.0.1:63441 - "POST /index.html HTTP/1.1" - 400 Bad Request
