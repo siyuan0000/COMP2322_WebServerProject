@@ -11,11 +11,6 @@ It supports:
 - Request logging to `server.log`
 
 A simple client script is provided for manual and batch testing.
-
-## Project Structure
-
-. ├── server.py # Server implementation ├── client.py # Test client ├── server.log # Generated log file └── www/ # Web root directory ├── index.html # Sample HTML file └── unsupported.xyz # File to test 415 error
-
 ## Running the Server
 
 ```bash
@@ -61,4 +56,4 @@ Example log entry:
 - Directory listing is forbidden.
 - Error responses return minimal HTML pages.
 - Persistent connections follow HTTP/1.1 standards.
-```
+
