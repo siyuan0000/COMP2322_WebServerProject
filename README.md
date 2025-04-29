@@ -40,8 +40,8 @@ The server listens on `http://localhost:8080/` and automatically creates the `ww
 ## Webpage Behavior
 
 - Access `http://localhost:8080/index.html` to view the homepage.
-- Clicking **"Chart 1"** on the homepage navigates to `ink_vis_r123_bt123.html`, which displays an embedded leaderboard image (`Leaderboard.PNG`).
-
+- Clicking **"Chart 1"** on the homepage navigates to `ink_vis_r123_bt123.html`
+- 
 ## Using the Client
 
 ### Single Request
@@ -112,4 +112,3 @@ Logs are written in a thread-safe manner to ensure consistency under concurrent 
 - Directory listing is forbidden; only direct file requests are supported.
 - Error responses include simple HTML error pages.
 - The server automatically handles persistent connections according to HTTP/1.1 standards.
-```
