@@ -4,7 +4,9 @@ import time
 import urllib.parse
 import email.utils
 from datetime import datetime, timezone
+import threading
 
+log_lock = threading.Lock()
 # Configuration
 HOST = '0.0.0.0'        # Listen on all network interfaces
 PORT = 8080             # Default port for the server
@@ -44,14 +46,14 @@ def format_http_date(ts: float) -> str:
     return dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
 def log_request(client_addr: str, request_line: str, status_code: int) -> None:
-    """
-    Log a request to the log file with timestamp, client address, request line, and status code.
-    """
+    """Thread-safe request logger."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     reason = STATUS_PHRASES.get(status_code, "")
-    log_entry = f"{timestamp} - {client_addr} - \"{request_line}\" - {status_code} {reason}\n"
-    with open(LOG_FILE, "a") as logf:
-        logf.write(log_entry)
+    entry = f"{timestamp} - {client_addr} - \"{request_line}\" - {status_code} {reason}\n"
+    with log_lock:                     # NEW
+        with open(LOG_FILE, "a") as f:
+            f.write(entry)
+
 
 def parse_request(request_data: bytes):
     """
@@ -214,6 +216,69 @@ def build_response(method: str, normalized_path: str, version: str, headers: dic
     # Combine status line, headers, and body into final response bytes
     response_bytes = status_line.encode("utf-8") + headers_bytes + b"\r\n" + body
     return response_bytes, keep_alive, status_code
+def handle_client(client_sock, client_addr):
+    """Serve one client connection in its own thread; supports HTTP keep-alive."""
+    client_ip, client_port = client_addr
+    addr_str = f"{client_ip}:{client_port}"
+
+    try:
+        while True:  # allow multiple requests on the same TCP connection
+            data = b""
+            while b"\r\n\r\n" not in data:
+                chunk = client_sock.recv(1024)
+                if not chunk:          # client closed connection
+                    break
+                data += chunk
+            if not data:               # nothing more to read
+                break
+
+            try:
+                method, path, version, headers, request_line = parse_request(data)
+            except PermissionError:    # directory-traversal attempt
+                status = 403
+                reason = STATUS_PHRASES[status]
+                body = (f"<html><head><title>{status} {reason}</title></head>"
+                        f"<body><h1>{status} {reason}</h1>"
+                        f"<p>The requested resource is forbidden.</p></body></html>")
+                proto = "HTTP/1.1" if b"HTTP/1.1" in data else "HTTP/1.0"
+                resp = (f"{proto} {status} {reason}\r\n"
+                        f"Date: {format_http_date(time.time())}\r\n"
+                        f"Content-Type: text/html\r\n"
+                        f"Content-Length: {len(body.encode())}\r\n"
+                        f"Connection: close\r\n\r\n"
+                        f"{body}")
+                client_sock.sendall(resp.encode())
+                first_line = data.split(b"\r\n", 1)[0].decode("iso-8859-1", "ignore")
+                log_request(addr_str, first_line, status)
+                break  # close connection
+            except ValueError:         # malformed request
+                status = 400
+                reason = STATUS_PHRASES[status]
+                body = (f"<html><head><title>{status} {reason}</title></head>"
+                        f"<body><h1>{status} {reason}</h1>"
+                        f"<p>The request could not be understood.</p></body></html>")
+                proto = "HTTP/1.1" if b"HTTP/1.1" in data else "HTTP/1.0"
+                resp = (f"{proto} {status} {reason}\r\n"
+                        f"Date: {format_http_date(time.time())}\r\n"
+                        f"Content-Type: text/html\r\n"
+                        f"Content-Length: {len(body.encode())}\r\n"
+                        f"Connection: close\r\n\r\n"
+                        f"{body}")
+                client_sock.sendall(resp.encode())
+                first_line = data.split(b"\r\n", 1)[0].decode("iso-8859-1", "ignore")
+                log_request(addr_str, first_line, status)
+                break  # close connection
+
+            response_bytes, keep_alive, status_code = build_response(
+                method, path, version, headers
+            )
+            client_sock.sendall(response_bytes)
+            log_request(addr_str, request_line, status_code)
+
+            if not keep_alive:         # client or protocol asked to close
+                break
+    finally:
+        client_sock.close()
 
 def run_server(host: str = HOST, port: int = PORT):
     """
@@ -231,6 +296,9 @@ def run_server(host: str = HOST, port: int = PORT):
             client_sock, client_addr = server_sock.accept()
             client_ip, client_port = client_addr
             addr_str = f"{client_ip}:{client_port}"
+            t = threading.Thread(target=handle_client, args=(client_sock, client_addr))
+            t.daemon = True  # optional: let threads exit with main program
+            t.start()
             try:
                 # Handle requests on this connection (support persistent connections)
                 while True:
