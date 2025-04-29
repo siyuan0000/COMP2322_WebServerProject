@@ -20,7 +20,8 @@ COMP2322_WebServerProject-main/
 ├── README.md          # Project documentation
 ├── server.log         # Generated log file
 ├── server_simple.py   # Basic server version
-├── serverPro.py       # Full-featured multi-threaded server
+├── serverPro.py       # Full-featured server
+├── serverFinal.py  # Full-featured multi-threaded server
 ├── www/               # Web root directory
 │   ├── index.html                 # Home page with navigation links
 │   ├── ink_vis_r123_bt123.html     # Chart 1 page linked from index.html
@@ -32,7 +33,7 @@ COMP2322_WebServerProject-main/
 Start the server by running:
 
 ```bash
-python serverPro.py
+python serverFinal.py
 ```
 
 The server listens on `http://localhost:8080/` and automatically creates the `www/` directory if it does not exist.
