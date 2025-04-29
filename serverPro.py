@@ -227,7 +227,6 @@ def handle_client(client_sock, client_addr):
 
     try:
         while True:                                    # loop for persistent connection
-            # ▸ read until we reach the blank line that ends headers
             request_bytes = b""
             while b"\r\n\r\n" not in request_bytes:
                 chunk = client_sock.recv(1024)
@@ -237,10 +236,9 @@ def handle_client(client_sock, client_addr):
             if not request_bytes:                       # nothing received
                 break
 
-            # ▸ parse request -------------------------------------------------
             try:
                 method, path, version, headers, req_line = parse_request(request_bytes)
-            except PermissionError:                     # directory traversal attempt → 403
+            except PermissionError:
                 status = 403
                 reason = STATUS_PHRASES[status]
                 body = (f"<html><body><h1>{status} {reason}</h1>"
@@ -309,6 +307,6 @@ def run_server(host: str = HOST, port: int = PORT):
         print("\n[SHUTDOWN] Server stopped by user")
     finally:
         server_sock.close()
-# Run the server when executed as a script
+
 if __name__ == "__main__":
     run_server()
