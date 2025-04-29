@@ -1,12 +1,13 @@
 import socket
+import threading
 import sys
 import time
 
 HOST = '127.0.0.1'  # Server IP address
 PORT = 8080         # Server port number
 
-def send_request(method, path='/', extra_headers=None):
-    """Send an HTTP request and return the response text."""
+def send_request(method, path='/', extra_headers=None, client_id=0):
+    """Send a single HTTP request and print response with client ID."""
     if extra_headers is None:
         extra_headers = {}
 
@@ -14,7 +15,7 @@ def send_request(method, path='/', extra_headers=None):
     headers = {
         "Host": f"{HOST}:{PORT}",
         "Connection": "close",
-        "User-Agent": "SimpleTestClient/1.0"
+        "User-Agent": f"SimpleTestClient/{client_id}"
     }
     headers.update(extra_headers)
 
@@ -22,67 +23,72 @@ def send_request(method, path='/', extra_headers=None):
     request_data = (request_line + header_text + "\r\n").encode('utf-8')
 
     response = b""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        s.sendall(request_data)
-        while True:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            response += chunk
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((HOST, PORT))
+            s.sendall(request_data)
+            while True:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+    except Exception as e:
+        print(f"[Client {client_id}] Connection error: {e}")
+        return
 
-    return response.decode('iso-8859-1', errors='replace')
-
-
-def simple_test(method, path, description, extra_headers=None):
-    """Run a single test and print the result."""
-    print(f"\n=== {description} ===")
-    print(f"Request: {method} {path}")
-    response = send_request(method, path, extra_headers)
-    print(response)
-    print("="*40)
+    print(f"\n--- Client {client_id} Response ---")
+    print(response.decode('iso-8859-1', errors='replace'))
+    print(f"--- End of Client {client_id} Response ---\n")
 
 
 def batch_test():
-    """Batch send test requests to cover all functionalities."""
-
+    """Sequentially test different functionalities."""
     tests = [
-        # Normal file requests
-        ("GET", "/index.html", "1. Normal GET request returns 200 OK"),
-        ("HEAD", "/index.html", "2. Normal HEAD request returns 200 OK (no body)"),
-
-        # Test If-Modified-Since header
-        ("GET", "/index.html", "3. Test 304 Not Modified with If-Modified-Since", {
-            "If-Modified-Since": "Wed, 01 Jan 3000 00:00:00 GMT"  # Future time to trigger 304 response
-        }),
-
-        # Test 404 Not Found
-        ("GET", "/nofile.html", "4. Non-existent file request returns 404 Not Found"),
-
-        # Test 403 Forbidden (directory traversal attempt)
-        ("GET", "/../server.log", "5. Accessing parent directory triggers 403 Forbidden"),
-
-        # Test 415 Unsupported Media Type
-        ("GET", "/unsupported.xyz", "6. Unsupported file type returns 415 Unsupported Media Type"),
-
-        # Test 400 Bad Request (invalid method)
-        ("POST", "/index.html", "7. Invalid method returns 400 Bad Request"),
+        ("GET", "/index.html", "Normal GET Request"),
+        ("HEAD", "/index.html", "HEAD Request (No body)"),
+        ("GET", "/nofile.html", "404 Not Found Test"),
+        ("GET", "/../server.log", "403 Forbidden Test"),
+        ("GET", "/unsupported.xyz", "415 Unsupported Media Type Test"),
+        ("POST", "/index.html", "400 Bad Request Test"),
     ]
 
-    for test in tests:
-        if len(test) == 4:
-            method, path, description, headers = test
-        else:
-            method, path, description = test
-            headers = None
-        simple_test(method, path, description, headers)
+    for idx, (method, path, description) in enumerate(tests, start=1):
+        print(f"\n=== {idx}. {description} ===")
+        send_request(method, path, client_id=idx)
+        time.sleep(0.5)  # Small delay between tests
+
+
+def concurrent_test(num_clients=10):
+    """Launch multiple clients concurrently to test server's multi-threading."""
+    threads = []
+
+    print(f"Starting {num_clients} concurrent clients...\n")
+
+    for i in range(num_clients):
+        t = threading.Thread(target=send_request, args=("GET", "/index.html", None, i))
+        threads.append(t)
+        t.start()
+        time.sleep(0.05)  # Slight stagger to better simulate real-world clients
+
+    for t in threads:
+        t.join()
+
+    print(f"\n[Concurrent Test] All {num_clients} clients have completed.")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "batch":
-        batch_test()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "batch":
+            batch_test()
+        elif sys.argv[1] == "concurrent":
+            num = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+            concurrent_test(num)
+        else:
+            method = sys.argv[1].upper()
+            path = sys.argv[2] if len(sys.argv) > 2 else "/"
+            send_request(method, path, client_id=0)
     else:
-        # Support custom requests via command line
-        method = sys.argv[1] if len(sys.argv) > 1 else "GET"
-        path = sys.argv[2] if len(sys.argv) > 2 else "/"
-        simple_test(method, path, "Single custom request")
+        print("Usage:")
+        print("  python client.py [METHOD] [PATH]          # Send a single request")
+        print("  python client.py batch                    # Run batch functional tests")
+        print("  python client.py concurrent [num_clients] # Run concurrent clients test")
