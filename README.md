@@ -24,6 +24,7 @@ COMP2322_WebServerProject-main/
 ├── www/               # Web root directory
 │   ├── index.html                 # Home page with navigation links
 │   ├── ink_vis_r123_bt123.html     # Chart 1 page linked from index.html
+│   ├── unsupported.xyz             # for unsupported file type testing
 │   └── Leaderboard.PNG             # Image embedded in index.html
 ```
 

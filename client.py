@@ -2,12 +2,13 @@ import socket
 import threading
 import sys
 import time
+import email.utils  # for RFC-1123 date
 
-HOST = '127.0.0.1'  # Server IP address
-PORT = 8080         # Server port number
+HOST = '127.0.0.1'
+PORT = 8080
 
 def send_request(method, path='/', extra_headers=None, client_id=0):
-    """Send a single HTTP request and print response with client ID."""
+    """Send a single HTTP request and print the response (tagged by client ID)."""
     if extra_headers is None:
         extra_headers = {}
 
@@ -19,21 +20,21 @@ def send_request(method, path='/', extra_headers=None, client_id=0):
     }
     headers.update(extra_headers)
 
-    header_text = ''.join(f"{k}: {v}\r\n" for k, v in headers.items())
-    request_data = (request_line + header_text + "\r\n").encode('utf-8')
+    header_block = ''.join(f"{k}: {v}\r\n" for k, v in headers.items())
+    request_bytes = (request_line + header_block + "\r\n").encode('utf-8')
 
     response = b""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((HOST, PORT))
-            s.sendall(request_data)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((HOST, PORT))
+            sock.sendall(request_bytes)
             while True:
-                chunk = s.recv(4096)
+                chunk = sock.recv(4096)
                 if not chunk:
                     break
                 response += chunk
-    except Exception as e:
-        print(f"[Client {client_id}] Connection error: {e}")
+    except Exception as exc:
+        print(f"[Client {client_id}] Connection error: {exc}")
         return
 
     print(f"\n--- Client {client_id} Response ---")
@@ -42,53 +43,54 @@ def send_request(method, path='/', extra_headers=None, client_id=0):
 
 
 def batch_test():
-    """Sequentially test different functionalities."""
+    """Sequentially issue requests covering required status codes (304 included)."""
+    # Generate current time in RFC-1123 format for the 304 test
+    current_http_date = email.utils.formatdate(usegmt=True)
+
     tests = [
-        ("GET", "/index.html", "Normal GET Request"),
-        ("HEAD", "/index.html", "HEAD Request (No body)"),
-        ("GET", "/nofile.html", "404 Not Found Test"),
-        ("GET", "/../server.log", "403 Forbidden Test"),
-        ("GET", "/unsupported.xyz", "415 Unsupported Media Type Test"),
-        ("POST", "/index.html", "400 Bad Request Test"),
+        ("GET", "/index.html", {}, "Normal GET Request (200)"),
+        ("HEAD", "/index.html", {}, "HEAD Request (200, no body)"),
+        ("GET", "/nofile.html", {}, "404 Not Found Test"),
+        ("GET", "/../server.log", {}, "403 Forbidden Test"),
+        ("GET", "/unsupported.xyz", {}, "415 Unsupported Media Type Test"),
+        ("POST", "/index.html", {}, "400 Bad Request Test"),
+        ("GET", "/index.html", {"If-Modified-Since": current_http_date}, "304 Not Modified Test"),
     ]
 
-    for idx, (method, path, description) in enumerate(tests, start=1):
-        print(f"\n=== {idx}. {description} ===")
-        send_request(method, path, client_id=idx)
-        time.sleep(0.5)  # Small delay between tests
+    for idx, (method, path, extra_headers, desc) in enumerate(tests, 1):
+        print(f"\n=== {idx}. {desc} ===")
+        send_request(method, path, extra_headers, client_id=idx)
+        time.sleep(0.4)
 
 
 def concurrent_test(num_clients=10):
-    """Launch multiple clients concurrently to test server's multi-threading."""
-    threads = []
-
+    """Launch multiple clients concurrently to validate multi-threading."""
     print(f"Starting {num_clients} concurrent clients...\n")
-
+    threads = []
     for i in range(num_clients):
         t = threading.Thread(target=send_request, args=("GET", "/index.html", None, i))
-        threads.append(t)
         t.start()
-        time.sleep(0.05)  # Slight stagger to better simulate real-world clients
-
+        threads.append(t)
+        time.sleep(0.05)
     for t in threads:
         t.join()
-
-    print(f"\n[Concurrent Test] All {num_clients} clients have completed.")
+    print(f"\n[Concurrent Test] All {num_clients} clients completed.")
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        if sys.argv[1] == "batch":
+        cmd = sys.argv[1].lower()
+        if cmd == "batch":
             batch_test()
-        elif sys.argv[1] == "concurrent":
-            num = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-            concurrent_test(num)
+        elif cmd == "concurrent":
+            n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+            concurrent_test(n)
         else:
             method = sys.argv[1].upper()
             path = sys.argv[2] if len(sys.argv) > 2 else "/"
             send_request(method, path, client_id=0)
     else:
         print("Usage:")
-        print("  python client.py [METHOD] [PATH]          # Send a single request")
-        print("  python client.py batch                    # Run batch functional tests")
-        print("  python client.py concurrent [num_clients] # Run concurrent clients test")
+        print("  python client.py [METHOD] [PATH]          # Single request")
+        print("  python client.py batch                    # Sequential tests")
+        print("  python client.py concurrent [N]           # N concurrent clients")
